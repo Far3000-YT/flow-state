@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Far3k - VOID_OS Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0A0812;
+            --text-color: #D0C8E8;
+            --accent-color: #A060D8;
+            --secondary-accent-color: #7858C0;
+            --secondary-text-color: #9890B8;
+            --error-color: #D84860;
+            --success-color: #58C8A8;
+            --caret-color: var(--accent-color);
+            --scanline-dark: rgba(0,0,0,0.20);
+            --scanline-v-tint: rgba(60, 40, 100, 0.03);
+            --border-color: #201830;
+            --body-bg-color: #06040A;
+        }
+
+        body {
+            background-color: var(--body-bg-color);
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            color: var(--text-color);
+        }
+
+        #terminal-container {
+            width: 96vw;
+            height: 94vh;
+            max-width: 1400px;
+            max-height: 900px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        #terminal-container::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            background:
+                linear-gradient(var(--scanline-dark) 50%, transparent 50%),
+                linear-gradient(90deg, var(--scanline-v-tint), transparent 3%, transparent 97%, var(--scanline-v-tint));
+            background-size: 100% 2px, 5px 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        #terminal-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            line-height: 1.3;
+            word-wrap: break-word;
+            color: var(--text-color);
+            font-size: 1em;
+            position: relative;
+            z-index: 2;
+        }
+        #terminal-content::-webkit-scrollbar { display: none; }
+        #terminal-content { scrollbar-width: none; -ms-overflow-style: none; }
+
+        .welcome-block {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            height: calc(100% - 40px);
+            overflow: hidden;
+        }
+
+        #welcome-ascii-art-container {
+            flex-basis: 60%;
+            flex-shrink: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #welcome-ascii-art {
+            display: inline-block;
+            line-height: 1.2;
+            white-space: pre;
+            color: var(--accent-color);
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .system-info-block {
+            flex-basis: 40%;
+            flex-grow: 1;
+            font-size: 0.9em;
+            line-height: 1.25;
+            overflow-y: auto;
+            height: 100%;
+            padding-left: 5px;
+            padding-right: 5px;
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .system-info-block p {
+            margin: 1px 0;
+        }
+        .system-info-block .label {
+            color: var(--secondary-accent-color);
+            display: inline-block;
+            width: 110px;
+            white-space: nowrap;
+        }
+        .system-info-block .value {
+            color: var(--text-color);
+        }
+
+        .prompt-to-enter {
+            font-size: 1em;
+            color: var(--accent-color);
+            text-align: left;
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            width: calc(100% - 10px);
+        }
+
+        .initial-help-message {
+            color: var(--secondary-text-color);
+            margin-bottom: 8px;
+        }
+
+        .line {
+             margin-bottom: 2px; white-space: pre-wrap;
+        }
+        .line.input-line {
+            display: flex; align-items: center;
+        }
+
+        .prompt {
+            color: var(--secondary-text-color);
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .command-input {
+            background-color: transparent;
+            border: none;
+            color: var(--text-color);
+            font-family: 'VT323', monospace;
+            font-size: inherit;
+            flex-grow: 1;
+            outline: none;
+            caret-color: var(--caret-color);
+        }
+        .error { color: var(--error-color); }
+        .success { color: var(--success-color); }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .accent-color { color: var(--accent-color); }
+        .secondary-accent-color { color: var(--secondary-accent-color); }
+    </style>
+</head>
+<body>
+    <div id="terminal-container">
+        <div id="terminal-content" onclick="focusInput()">
+        </div>
+    </div>
+
+    <script>
+        const ASCII_ART_COLUMNS = 128;
+        const ASCII_ART_ROWS = 45;
+        const ASCII_CHAR_WIDTH_FACTOR = 0.56;
+        const ASCII_EFFECTIVE_LINE_HEIGHT = 0.85;
+
+        function adjustAsciiArtSize() {
+            const asciiContainer = document.getElementById('welcome-ascii-art-container');
+            const asciiArtEl = document.getElementById('welcome-ascii-art');
+
+            if (!asciiContainer || !asciiArtEl) return;
+
+            if (asciiContainer.offsetWidth <= 0 || asciiContainer.offsetHeight <= 0) {
+                requestAnimationFrame(adjustAsciiArtSize);
+                return;
+            }
+
+            const containerWidth = asciiContainer.offsetWidth;
+            const containerHeight = asciiContainer.offsetHeight;
+
+            let fontSizeBasedOnWidth = containerWidth / (ASCII_ART_COLUMNS * ASCII_CHAR_WIDTH_FACTOR);
+            let fontSizeBasedOnHeight = containerHeight / (ASCII_ART_ROWS * ASCII_EFFECTIVE_LINE_HEIGHT);
+
+            let newFontSize = Math.floor(Math.min(fontSizeBasedOnWidth, fontSizeBasedOnHeight));
+            newFontSize = Math.max(1, newFontSize);
+
+            if (asciiArtEl.style.fontSize !== newFontSize + 'px') {
+                 asciiArtEl.style.fontSize = newFontSize + 'px';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const terminalContent = document.getElementById('terminal-content');
+            const promptString = "guest@void:~# ";
+            let currentInputLine;
+            let currentInput;
+            let terminalInCommandMode = false;
+            const startTime = Date.now();
+
+            const newAsciiArt = `
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣫⣡⡿⡵⣫⣾⣿⡿⣋⣥⣶⣷⣾⣿⣿⣵⣦⣌⠻⣿⣿⣿⣿⣷⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢷⠝⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠯⢱⣫⢗⡞⢕⣿⣿⢿⣾⣿⣿⣿⣿⢿⣿⣿⣿⣿⣿⣿⣜⣿⡽⣿⣿⣷⣿⣿⣿⣿⣿⣷⣹⣿⣟⢿⣿⣿⣿⣯⣇⡸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⢠⣏⡟⢟⡾⣾⣿⢳⣿⡿⣷⣿⡿⡫⣾⣿⢿⣿⣿⣿⣿⣿⢻⣿⢿⣿⣿⣧⢿⣿⣿⣿⣿⣯⣿⣿⢸⣿⣿⣿⣇⡘⡽⣌⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⣿⡰⡞⣿⢳⣿⣷⣿⢟⣿⣿⢏⣬⣾⡇⢿⡏⢿⣿⣿⣿⣿⡏⣿⡌⣿⣿⣿⡟⣿⣿⣿⣿⣿⣿⣿⡇⢻⣿⣿⣿⡁⢷⢿⡌⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⢃⠀⢣⣽⣱⡿⣿⡏⣿⣏⣾⡟⣵⣿⣿⣿⣿⡜⣯⢊⢿⣿⣿⣿⣷⣿⡇⣮⢿⣿⣿⣹⣿⣿⣿⣿⣿⣿⣷⢸⣿⣿⣿⣧⣿⡘⣿⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⠼⢠⡽⣿⣿⠇⣿⢸⣟⣾⢯⣾⣿⣿⣿⣿⣿⣷⡜⣯⣎⢻⣿⣿⣿⣿⡇⣿⡎⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡎⣿⢻⣿⣿⣸⡇⢿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣧⢞⡻⣕⢸⢧⣿⣿⢸⣿⣿⣿⢄⢶⣯⣽⢿⣿⣿⣿⣿⣿⣌⢮⢒⠛⣛⡿⣿⢁⢿⣿⡼⣿⣿⣿⣷⣿⣿⣿⣿⣿⣧⢿⠘⣿⣿⣧⡇⠞⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣾⣾⠆⣤⠘⣷⢹⣿⢹⡇⣏⣿⣷⣾⣯⣼⣿⣿⣿⣿⣟⣑⣓⡙⢣⡉⠆⡟⣼⣦⣻⣧⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠸⡆⣿⣿⣿⢗⡖⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⢧⢫⣰⣿⢋⡇⣮⠘⠻⢞⢿⣷⣾⣻⣿⣿⣿⣿⣿⣿⣿⡿⢆⣙⡼⢀⠻⣛⡷⣻⣽⢻⣿⣿⣿⣿⣿⣿⣿⡏⢸⣿⣿⣽⣿⡘⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⡟⣮⢿⡿⣿⣏⣧⠸⠀⢰⣀⢉⠒⠝⢣⣿⣿⣿⣿⣿⣿⣿⣡⣿⡑⠡⠤⠈⠊⠻⢷⠉⣾⡟⣽⣿⣿⣿⣿⢿⡇⡚⣩⣭⡭⠽⠷⠤⣭⡭⠭⣭⣭⡭⠭⢭⣝⢻
+⣿⣿⣿⣿⣿⣿⣿⡇⣿⡇⢣⡏⣿⣝⡀⡇⣷⡹⣌⠳⠤⠌⢻⣿⣿⣿⣿⣿⣿⠟⠁⣀⠉⣉⠉⠉⡤⢠⡤⡀⣐⣿⣿⣻⣿⡿⣼⠃⣻⣭⣿⣶⣶⢳⣗⣶⣿⣿⣶⡶⣖⡴⣫⣴⣿
+⣿⣿⣿⣿⣿⣿⣿⣧⢻⡇⢦⢏⢘⡟⣆⢻⢸⣿⣮⣯⣭⣿⣿⣿⣿⣿⣿⠟⡡⣢⣾⡻⣷⣽⣛⣛⡤⣃⣼⣳⣿⡿⣳⡟⣸⣧⣇⢺⣿⣿⣿⡿⣫⣿⠾⡟⣻⣭⡵⣺⣵⣾⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣄⢷⢸⣣⣣⡻⡿⣆⠃⠛⢿⣿⣿⣟⣽⣛⣿⣯⣴⣿⣿⣿⣿⣿⣿⣶⣶⠞⢈⡿⢡⣿⢿⣿⣟⢰⣟⡌⠀⣺⣿⠛⢉⣪⣥⣶⠿⢛⣭⣾⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⣷⠈⢤⠻⡙⣧⣳⣄⣭⣿⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⣥⢎⡾⣵⣿⣵⣿⠯⣲⡟⠍⢠⣶⣿⡭⠶⢟⣋⣭⣶⣿⣈⣝⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣮⣇⠸⣦⠡⠈⠋⢿⣿⣿⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠫⢋⠜⣿⣿⡟⡡⠚⠋⠐⠖⢀⡭⡥⣰⢸⣿⣿⣿⣿⣿⣧⡜⡝⢿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⡞⣴⡿⣱⢸⣆⢀⢹⣿⣿⣿⡿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣵⡏⢊⣿⠟⣫⡔⢀⢀⣮⠎⢰⢟⢹⡇⡏⠏⣿⣿⡏⣿⣆⢻⡽⢘⣎⢻⡿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡺⣽⡿⡇⠊⣿⢏⣷⡝⢽⢿⣿⣯⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⡰⣚⣵⠿⢋⣴⣏⣜⣎⠆⢯⢧⣿⢸⣷⠂⢻⣿⣿⠘⣿⣕⠻⢯⠻⣆⠙⢿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣫⡾⢷⣿⣾⣿⣿⢏⣾⣿⢳⣷⡜⢽⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢃⢉⣠⣾⣿⠏⢬⢮⠈⢶⡏⣸⣿⣼⣿⣜⡈⣿⣿⣧⢻⣿⣦⠮⡟⣗⡯⣎⠻⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣻⠷⢋⢴⣿⢿⣿⡿⢣⣾⣿⢧⣹⣟⣽⣷⣅⠙⢿⣿⡿⠿⠛⣛⣭⠴⣺⠵⢿⣻⣭⢄⡠⡳⡃⣬⡎⡇⣿⣿⢿⣿⣿⣻⡘⣿⣿⡌⣿⣿⣧⣓⡝⣿⠎⢳⡜⢿
+⣿⣿⡿⣿⢽⣾⢵⣰⣫⡿⣵⣿⠟⣡⣿⣿⣳⣷⢯⣾⡏⣸⣟⡖⡂⠠⣤⣤⣤⣤⣶⣶⡾⠿⣻⡻⠁⢈⢊⣜⣼⡟⡄⣧⢿⣿⢸⡞⣿⣷⢷⣜⣿⣿⡘⣿⣿⣧⡈⠺⣧⡈⢿⣾
+⣿⢟⠙⣈⣵⢟⣽⣿⣽⣫⣾⡿⡹⣵⣷⡿⣵⡟⣴⣿⠯⢖⣻⣼⡇⠙⣶⠶⠶⠶⡶⠶⣶⣿⡟⣫⢀⣴⣢⡟⣼⣿⣷⡇⢸⡾⣿⡇⡱⠘⣿⣎⣿⣮⢿⣷⡨⡿⣿⣷⣶⡔⢕⠸⣿
+⣾⢦⣾⣿⣷⣽⢟⢞⣷⡿⡫⢔⣾⣿⢋⣞⣿⣿⠋⡅⠤⠾⠿⠶⠒⡇⣿⣿⣿⣿⣿⣿⡿⣫⢞⣵⡿⣷⠟⢴⣿⣿⣰⡾⢺⣇⠹⣇⠘⣅⢮⢿⡘⣿⣷⡻⣷⠑⣝⢿⣿⣿⡧⣳⣟
+⣷⢿⡿⣻⡿⣫⣾⡿⣏⣺⣪⣿⠟⣡⣿⢏⣶⢿⣴⣾⢍⡩⢟⣟⣳⣀⠿⣿⣿⣿⡿⡯⡟⡵⢟⢛⣾⡯⣼⠊⢹⣿⠔⣰⡄⢿⡴⡽⡔⣤⠪⣓⠓⢝⣿⣿⣾⢷⣈⣷⡟⢿⣿⣿⣾
+⣿⣿⣿⣻⡴⣟⣽⣿⡿⣵⢿⢕⣾⣽⣿⣟⣯⣽⣿⣷⣯⣾⡿⢡⣶⣽⣛⣿⡿⢯⣾⢋⣿⣟⣛⣿⣟⣵⣿⢰⢸⣿⣸⣿⣿⡜⣿⡴⣬⡌⠳⠬⡻⢷⡪⣿⣿⣿⣷⡷⣝⣿⣽⣿⣿
+`;
+
+            const commands = {
+                help: () => `
+<span class="success">COMMAND MATRIX</span>
+  <span class="accent-color">aboutme</span>      - display user profile.
+  <span class="accent-color">projects</span>     - showcase notable projects.
+  <span class="accent-color">skills</span>       - list technical proficiencies.
+  <span class="accent-color">contact</span>      - view contact information.
+  <span class="accent-color">clear</span>        - return to boot sequence.
+                `,
+                aboutme: () => `
+<span class="secondary-accent-color">[user_profile]</span>
+  <span class="label">name:</span><span class="value"> far3k - 流动状态</span>
+  <span class="label">title:</span><span class="value"> cs master's student, python addict</span>
+  <span class="label">archetype:</span><span class="value"> istj-a (logical, structured)</span>
+  <span class="label">bio:</span><span class="value"> architecting digital realms, python backend focus.</span>
+       <span class="value">navigating code currents & algorithms.</span>
+       <span class="value">pursuing flow state in systems.</span>
+       <span class="value">seeking quant finance / backend swe internship (aug/sep 2025).</span>
+  <span class="label">interests:</span><span class="value"> llms (gemini), quant finance, osu!, league, piano.</span>
+                `,
+                projects: () => `
+<span class="secondary-accent-color">[project_databank]</span>
+  * <span class="accent-color">lumen_cli</span>
+    > python cli tool for efficient data workflow automation.
+    > stack: [python, tiktoken, requests, chardet]
+
+  * <span class="accent-color">sde_monte_carlo_sim (2023)</span>
+    > stochastic differential equation simulator for financial modeling.
+    > stack: [python, numpy, matplotlib, sci-py]
+
+  > more projects incoming...
+  > archives: <a href="https://github.com/Far3000-YT/" target="_blank">github.com/far3000-yt</a>
+                `,
+                skills: () => `
+<span class="secondary-accent-color">[skill_assessment]</span>
+  <span class="label">languages:</span><span class="value"> python, golang (learning), java (i hate it)</span>
+  <span class="label">expertise:</span><span class="value"> automation, api's, backend systems</span>
+  <span class="label">interests:</span><span class="value"> ai (llm focus - gemini), quantitative finance, systems programming</span>
+  <span class="label">meta_skills:</span><span class="value"> professional prompting, logical problem-solving, detail-oriented</span>
+                `,
+                contact: () => `
+<span class="secondary-accent-color">[communication_channels]</span>
+  <span class="label">mail:</span><span class="value"> <a href="mailto:far3000yt@gmail.com">far3000yt@gmail.com</a></span>
+  <span class="label">gh:</span><span class="value">   <a href="https://github.com/Far3000-YT/" target="_blank">far3000-yt</a></span>
+  <span class="label">twt:</span><span class="value">  <a href="https://www.x.com/0xFar3000" target="_blank">0xfar3000</a></span>
+                `,
+                clear: () => {
+                    displayWelcomeInTerminal();
+                    return "";
+                }
+            };
+
+            function displayWelcomeInTerminal() {
+                terminalInCommandMode = false;
+                terminalContent.innerHTML = '';
+
+                const welcomeBlock = document.createElement('div');
+                welcomeBlock.classList.add('welcome-block');
+
+                const asciiContainer = document.createElement('div');
+                asciiContainer.id = 'welcome-ascii-art-container';
+                const asciiArtPre = document.createElement('pre');
+                asciiArtPre.id = 'welcome-ascii-art';
+                asciiArtPre.textContent = newAsciiArt;
+                asciiContainer.appendChild(asciiArtPre);
+                welcomeBlock.appendChild(asciiContainer);
+
+                const infoDiv = document.createElement('div');
+                infoDiv.classList.add('system-info-block');
+                infoDiv.innerHTML = `
+                    <p><span class="label">SYSTEM</span>:<span class="value"> void_os v3.1 (nexus core) // codename: fluent_stream</span></p>
+                    <p><span class="label">KERNEL</span>:<span class="value"> 9.f.k-far3k-void</span></p>
+                    <p><span class="label">FIRMWARE</span>:<span class="value"> nxs_bios v1.13.37</span></p>
+                    <p><span class="label">BUILD_ID</span>:<span class="value"> ${new Date().toISOString().split('T')[0]}</span></p>
+                    <p><span class="label">NODE_ID</span>:<span class="value"> nexus-terminal-7</span></p>
+                    <p><span class="label">UPTIME</span>:<span class="value"> <span id="uptime-value">initializing...</span></span></p>
+                    <p><span class="label">DISPLAY</span>:<span class="value"> <span id="resolution-value">detecting...</span> // gpu: simulated voidgl accelerator</span></p>
+                    <p><span class="label">CPU</span>:<span class="value"> quantum entanglement processor (flow core arch)</span></p>
+                    <p><span class="label">MEMORY</span>:<span class="value"> <span id="ram-total-value">1zb</span> (cryo-cooled)</span></p>
+                    <p><span class="label">STORAGE</span>:<span class="value"> root_fs: /dev/memfs (ephemeral) / usage: <span id="storage-usage-value">--</span>%</span></p>
+                    <p><span class="label">NET_IFACE</span>:<span class="value"> q_eth0: quantumlink (1 tbps) / status: <span id="network-status-value">link up</span></span></p>
+                    <p><span class="label">SYS_LOAD</span>:<span class="value"> <span id="cpu-load-value">--</span>%</span></p>
+                    <p><span class="label">DATE</span>:<span class="value"> <span id="current-date-value">--/--/----</span></span></p>
+                    <p><span class="label">TIME</span>:<span class="value"> <span id="current-time-value">--:--:--</span></span></p>
+                    <p><span class="label">CURRENT_USER</span>:<span class="value"> guest</span></p>
+                `;
+                welcomeBlock.appendChild(infoDiv);
+                terminalContent.appendChild(welcomeBlock);
+
+                const promptToEnter = document.createElement('p');
+                promptToEnter.classList.add('prompt-to-enter');
+                promptToEnter.innerHTML = `Press any key to interface with VOID_OS...`;
+                terminalContent.appendChild(promptToEnter);
+                
+                requestAnimationFrame(() => {
+                    adjustAsciiArtSize();
+                });
+                
+                window.addEventListener('resize', asciiArtResizeHandler);
+
+                updateDynamicWelcomeInfo();
+                document.addEventListener('keydown', handleInitialKeyPress, { once: true });
+                terminalContent.scrollTop = 0;
+            }
+            
+            function asciiArtResizeHandler() {
+                if (!terminalInCommandMode) {
+                    requestAnimationFrame(adjustAsciiArtSize);
+                }
+            }
+
+            function handleInitialKeyPress(event) {
+                if (event.key === " ") event.preventDefault();
+                
+                window.removeEventListener('resize', asciiArtResizeHandler);
+                
+                terminalContent.innerHTML = '';
+                terminalInCommandMode = true;
+                const helpSuggestion = document.createElement('div');
+                helpSuggestion.classList.add('line', 'initial-help-message');
+                helpSuggestion.innerHTML = `VOID_OS v3.1 Initialized. Type '<span class="success">help</span>' for command matrix.`;
+                terminalContent.appendChild(helpSuggestion);
+                newPrompt();
+            }
+
+            function updateDynamicWelcomeInfo() {
+                const uptimeElem = document.getElementById('uptime-value');
+                if (uptimeElem) {
+                    const now = Date.now();
+                    const diffSeconds = Math.floor((now - startTime) / 1000);
+                    const d = Math.floor(diffSeconds / (3600*24));
+                    const h = Math.floor((diffSeconds % (3600*24)) / 3600);
+                    const m = Math.floor((diffSeconds % 3600) / 60);
+                    const s = Math.floor(diffSeconds % 60);
+                    uptimeElem.textContent = `${d}d ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+                }
+
+                const resolutionElem = document.getElementById('resolution-value');
+                if (resolutionElem) resolutionElem.textContent = `${window.innerWidth}x${window.innerHeight} @ ${screen.colorDepth}bpp`;
+                
+                const ramTotalElem = document.getElementById('ram-total-value');
+                if (ramTotalElem) ramTotalElem.textContent = "1ZB";
+
+                const storageUsageElem = document.getElementById('storage-usage-value');
+                if (storageUsageElem) storageUsageElem.textContent = (Math.random() * 5 + 2).toFixed(2);
+                
+                const networkStatusElem = document.getElementById('network-status-value');
+                if (networkStatusElem) networkStatusElem.textContent = "connected";
+
+                const cpuLoadElem = document.getElementById('cpu-load-value');
+                if (cpuLoadElem) cpuLoadElem.textContent = (Math.random() * 15 + 5).toFixed(1);
+
+                const dateElem = document.getElementById('current-date-value');
+                const timeElem = document.getElementById('current-time-value');
+                if (dateElem && timeElem) {
+                    const now = new Date();
+                    dateElem.textContent = now.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
+                    timeElem.textContent = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                }
+
+                if (!terminalInCommandMode) {
+                    requestAnimationFrame(updateDynamicWelcomeInfo);
+                }
+            }
+
+            function appendLineToTerminal(htmlContent, type = 'output') {
+                const lineDiv = document.createElement('div');
+                lineDiv.classList.add('line');
+                if (type === 'error') lineDiv.classList.add('error');
+                lineDiv.innerHTML = htmlContent;
+                terminalContent.appendChild(lineDiv);
+                terminalContent.scrollTop = terminalContent.scrollHeight;
+            }
+
+            function newPrompt() {
+                if (!terminalInCommandMode) return;
+                currentInputLine = document.createElement('div');
+                currentInputLine.classList.add('line', 'input-line');
+                
+                const promptSpan = document.createElement('span');
+                promptSpan.classList.add('prompt');
+                promptSpan.textContent = promptString;
+                currentInputLine.appendChild(promptSpan);
+                
+                currentInput = document.createElement('input');
+                currentInput.type = 'text';
+                currentInput.classList.add('command-input');
+                currentInput.setAttribute('autocorrect', 'off');
+                currentInput.setAttribute('autocapitalize', 'off');
+                currentInput.setAttribute('spellcheck', 'false');
+                currentInput.addEventListener('keydown', handleTerminalInput);
+                currentInputLine.appendChild(currentInput);
+                
+                terminalContent.appendChild(currentInputLine);
+                focusInput();
+                terminalContent.scrollTop = terminalContent.scrollHeight;
+            }
+
+            function handleTerminalInput(e) {
+                if (!terminalInCommandMode || !currentInput) return;
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const commandStr = currentInput.value.trim();
+                    const enteredCommandText = currentInput.value;
+                    
+                    currentInput.readOnly = true;
+                    currentInput.classList.remove('command-input');
+
+                    const oldInputLine = currentInputLine;
+                    oldInputLine.removeChild(currentInput); 
+                    const commandTextNode = document.createTextNode(enteredCommandText);
+                    oldInputLine.appendChild(commandTextNode);
+                    currentInput = null;
+
+                    if (commandStr) {
+                        processCommand(commandStr);
+                    }
+                    
+                    if (terminalInCommandMode) {
+                        newPrompt();
+                    }
+                }
+            }
+
+            function processCommand(commandStr) {
+                const [commandName, ...args] = commandStr.toLowerCase().split(' ');
+                if (commands[commandName]) {
+                    const output = commands[commandName](args);
+                    if (output) {
+                        appendLineToTerminal(output);
+                    }
+                } else {
+                    appendLineToTerminal(`VOID_OS: ${commandStr.split(' ')[0]}: command not found`, 'error');
+                }
+            }
+
+            window.focusInput = () => {
+                if (terminalInCommandMode && currentInput) {
+                    currentInput.focus();
+                }
+            };
+            
+            displayWelcomeInTerminal();
+        });
+    </script>
+</body>
+</html>
