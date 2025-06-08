@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>流动状态 - far3k</title>
+    <title>流动状态 - Far3k</title>
     <link rel="icon" href="icon.jpg" type="image/x-icon">
     <link rel="shortcut icon" href="icon.jpg" type="image/x-icon">
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-color: #0A0812;
@@ -25,8 +27,8 @@
 
         body {
             background-color: var(--body-bg-color);
-            font-family: 'VT323', monospace;
-            font-size: 18px;
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
             margin: 0;
             display: flex;
             align-items: center;
@@ -162,7 +164,7 @@
             background-color: transparent;
             border: none;
             color: var(--text-color);
-            font-family: 'VT323', monospace;
+            font-family: 'Space Mono', monospace;
             font-size: inherit;
             flex-grow: 1;
             outline: none;
@@ -174,6 +176,29 @@
         a:hover { text-decoration: underline; }
         .accent-color { color: var(--accent-color); }
         .secondary-accent-color { color: var(--secondary-accent-color); }
+
+        /* Mobile Responsive Styles */
+        @media (max-width: 768px), (max-height: 500px) {
+            body { font-size: 14px; }
+            .welcome-block {
+                flex-direction: column;
+                height: 100%;
+                gap: 0;
+            }
+            #welcome-ascii-art-container {
+                flex-basis: 50%;
+                height: 50%;
+                width: 100%;
+            }
+            .system-info-block {
+                flex-basis: 50%;
+                height: 50%;
+                width: 100%;
+                justify-content: flex-start;
+                padding-top: 10px;
+            }
+            .prompt-to-enter { font-size: 0.9em; }
+        }
     </style>
 </head>
 <body>
@@ -259,34 +284,38 @@
                 `,
                 aboutme: () => `
 <span class="secondary-accent-color">[user_profile]</span>
-  <span class="label">name:</span><span class="value"> far3k - 流动状态</span>
-  <span class="label">title:</span><span class="value"> cs master's student, python addict</span>
+  <span class="label">name:</span><span class="value"> Far3k - 流动状态</span>
+  <span class="label">title:</span><span class="value"> CS Master's Student at ISEP</span>
   <span class="label">archetype:</span><span class="value"> istj-a (logical, structured)</span>
-  <span class="label">bio:</span><span class="value"> architecting digital realms, python backend focus.</span>
-       <span class="value">navigating code currents & algorithms.</span>
-       <span class="value">pursuing flow state in systems.</span>
-       <span class="value">seeking quant finance / backend swe internship (aug/sep 2025).</span>
-  <span class="label">interests:</span><span class="value"> llms (gemini), quant finance, osu!, league, piano.</span>
+  <span class="label">bio:</span><span class="value"> exploring automation with a simple philosophy:</span>
+       <span class="value">invest 5% of the effort to yield 2000% of the result.</span>
+       <span class="value">i engineer systems that create disproportionate value.</span>
+       <span class="value">seeking quant dev / swe internship (aug/sep 2025).</span>
+  <span class="label">interests:</span><span class="value"> llms, creative coding, osu!, lol, piano.</span>
                 `,
                 projects: () => `
 <span class="secondary-accent-color">[project_databank]</span>
-  * <span class="accent-color">lumen_cli</span>
-    > python cli tool for efficient data workflow automation.
-    > stack: [python, tiktoken, requests, chardet]
+  > <span class="accent-color">lumen_cli</span>
+    python cli tool for efficient data workflow automation.
+    stack: [python, tiktoken, requests, chardet]
 
-  * <span class="accent-color">sde_monte_carlo_sim</span>
-    > stochastic differential equation simulator for financial modeling.
-    > stack: [python, numpy, matplotlib, sci-py]
+  > <span class="accent-color">ai-responder-bgprocess</span>
+    a background process to automate ai inputs/outputs.
+    stack: [python, pyperclip, genai, tkinter]
+  
+  > <span class="accent-color">mistlify (wip)</span>
+    cheaper, self-hostable alternative to gitbook/mintlify.
+    stack: [golang, svelte, open-source]
 
-  > more projects incoming...
-  > archives: <a href="https://github.com/Far3000-YT/" target="_blank">github.com/far3000-yt</a>
+  more projects incoming...
+  archives: <a href="https://github.com/Far3000-YT/" target="_blank">github.com/far3000-yt</a>
                 `,
                 skills: () => `
 <span class="secondary-accent-color">[skill_assessment]</span>
-  <span class="label">languages:</span><span class="value"> python, golang (learning), java (i hate it)</span>
+  <span class="label">languages:</span><span class="value"> python, golang (learning)</span>
   <span class="label">expertise:</span><span class="value"> automation, api's, backend systems</span>
-  <span class="label">interests:</span><span class="value"> ai (llm focus - gemini), quant finance, systems programming</span>
-  <span class="label">meta_skills:</span><span class="value"> professional prompting, logical problem-solving, detail-oriented</span>
+  <span class="label">interests:</span><span class="value"> ai (llm focus), quant dev, systems programming</span>
+  <span class="label">meta_skills:</span><span class="value"> systems thinking, efficiency optimization, detail-oriented</span>
                 `,
                 contact: () => `
 <span class="secondary-accent-color">[communication_channels]</span>
@@ -318,28 +347,26 @@
                 const infoDiv = document.createElement('div');
                 infoDiv.classList.add('system-info-block');
                 infoDiv.innerHTML = `
-                    <p><span class="label">SYSTEM</span>:<span class="value"> void_os v3.1 (nexus core) // codename: fluent_stream</span></p>
+                    <p><span class="label">SYSTEM</span>:<span class="value"> void_os v3.1 (nexus core) - fluent_stream</span></p>
                     <p><span class="label">KERNEL</span>:<span class="value"> 9.f.k-far3k-void</span></p>
                     <p><span class="label">FIRMWARE</span>:<span class="value"> nxs_bios v1.13.37</span></p>
-                    <p><span class="label">BUILD_ID</span>:<span class="value"> ${new Date().toISOString().split('T')[0]}</span></p>
                     <p><span class="label">NODE_ID</span>:<span class="value"> nexus-terminal-7</span></p>
                     <p><span class="label">UPTIME</span>:<span class="value"> <span id="uptime-value">initializing...</span></span></p>
-                    <p><span class="label">DISPLAY</span>:<span class="value"> <span id="resolution-value">detecting...</span> // gpu: simulated voidgl accelerator</span></p>
+                    <p><span class="label">DISPLAY</span>:<span class="value"> <span id="resolution-value">detecting...</span> - gpu: voidgl accelerator</span></p>
                     <p><span class="label">CPU</span>:<span class="value"> quantum entanglement processor (flow core arch)</span></p>
                     <p><span class="label">MEMORY</span>:<span class="value"> <span id="ram-total-value">1zb</span> (cryo-cooled)</span></p>
-                    <p><span class="label">STORAGE</span>:<span class="value"> root_fs: /dev/memfs (ephemeral) / usage: <span id="storage-usage-value">--</span>%</span></p>
-                    <p><span class="label">NET_IFACE</span>:<span class="value"> q_eth0: quantumlink (1 tbps) / status: <span id="network-status-value">link up</span></span></p>
+                    <p><span class="label">STORAGE</span>:<span class="value"> root_fs: /dev/memfs (ephemeral) - usage: <span id="storage-usage-value">--</span>%</span></p>
+                    <p><span class="label">NET_IFACE</span>:<span class="value"> q_eth0: quantumlink (1 tbps) - status: <span id="network-status-value">link up</span></span></p>
                     <p><span class="label">SYS_LOAD</span>:<span class="value"> <span id="cpu-load-value">--</span>%</span></p>
                     <p><span class="label">DATE</span>:<span class="value"> <span id="current-date-value">--/--/----</span></span></p>
                     <p><span class="label">TIME</span>:<span class="value"> <span id="current-time-value">--:--:--</span></span></p>
-                    <p><span class="label">CURRENT_USER</span>:<span class="value"> guest</span></p>
                 `;
                 welcomeBlock.appendChild(infoDiv);
                 terminalContent.appendChild(welcomeBlock);
 
                 const promptToEnter = document.createElement('p');
                 promptToEnter.classList.add('prompt-to-enter');
-                promptToEnter.innerHTML = `Press any key to interface with VOID_OS...`;
+                promptToEnter.innerHTML = `Press any key or tap screen to interface with VOID_OS...`;
                 terminalContent.appendChild(promptToEnter);
                 
                 requestAnimationFrame(() => {
@@ -350,6 +377,7 @@
 
                 updateDynamicWelcomeInfo();
                 document.addEventListener('keydown', handleInitialKeyPress, { once: true });
+                document.addEventListener('touchstart', handleInitialKeyPress, { once: true });
                 terminalContent.scrollTop = 0;
             }
             
@@ -362,6 +390,10 @@
             function handleInitialKeyPress(event) {
                 if (event.key === " ") event.preventDefault();
                 
+                // Clean up both listeners
+                document.removeEventListener('keydown', handleInitialKeyPress);
+                document.removeEventListener('touchstart', handleInitialKeyPress);
+
                 window.removeEventListener('resize', asciiArtResizeHandler);
                 
                 terminalContent.innerHTML = '';
