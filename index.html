@@ -23,6 +23,36 @@
             --scanline-v-tint: rgba(60, 40, 100, 0.03);
             --border-color: #201830;
             --body-bg-color: #06040A;
+            --glow-color: rgba(160, 96, 216, 0.25);
+            --success-glow-color: rgba(88, 200, 168, 0.3);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes bootLine {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes terminalFlicker {
+            0%, 100% { opacity: 1; }
+            49.8% { opacity: 1; }
+            50% { opacity: 0.3; }
+            50.2% { opacity: 1; }
+        }
+
+        @keyframes caretBlink {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: var(--caret-color); }
         }
 
         body {
@@ -36,6 +66,7 @@
             min-height: 100vh;
             overflow: hidden;
             color: var(--text-color);
+            text-shadow: 0 0 3px var(--glow-color);
         }
 
         #terminal-container {
@@ -45,12 +76,14 @@
             max-height: 900px;
             background-color: var(--bg-color);
             border: 1px solid var(--border-color);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,0,0,0.5);
             position: relative;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             padding: 15px;
             box-sizing: border-box;
+            animation: terminalFlicker 15s infinite linear;
         }
 
         #terminal-container::before {
@@ -62,6 +95,15 @@
                 linear-gradient(var(--scanline-dark) 50%, transparent 50%),
                 linear-gradient(90deg, var(--scanline-v-tint), transparent 3%, transparent 97%, var(--scanline-v-tint));
             background-size: 100% 2px, 5px 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        #terminal-container::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.6) 100%);
             z-index: 1;
             pointer-events: none;
         }
@@ -85,6 +127,8 @@
             gap: 10px;
             height: calc(100% - 40px);
             overflow: hidden;
+            opacity: 0;
+            animation: fadeIn 0.5s 0.2s forwards;
         }
 
         #welcome-ascii-art-container {
@@ -101,6 +145,7 @@
             line-height: 1.2;
             white-space: pre;
             color: var(--accent-color);
+            text-shadow: 0 0 5px var(--glow-color);
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
@@ -149,10 +194,18 @@
         }
 
         .line {
-             margin-bottom: 2px; white-space: pre-wrap;
+            margin-bottom: 2px;
+            white-space: pre-wrap;
         }
+        .boot-line {
+            opacity: 0;
+            animation: bootLine 0.1s forwards;
+        }
+
         .line.input-line {
-            display: flex; align-items: center;
+            display: flex;
+            align-items: center;
+            cursor: text;
         }
 
         .prompt {
@@ -160,24 +213,44 @@
             margin-right: 8px;
             flex-shrink: 0;
         }
-        .command-input {
-            background-color: transparent;
-            border: none;
-            color: var(--text-color);
-            font-family: 'Space Mono', monospace;
-            font-size: inherit;
-            flex-grow: 1;
-            outline: none;
-            caret-color: var(--caret-color);
-        }
-        .error { color: var(--error-color); }
-        .success { color: var(--success-color); }
-        a { color: var(--accent-color); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .accent-color { color: var(--accent-color); }
-        .secondary-accent-color { color: var(--secondary-accent-color); }
 
-        /* Mobile Responsive Styles */
+        .command-output {
+            white-space: pre;
+            word-break: break-all;
+        }
+
+        .command-input {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .caret {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background-color: var(--caret-color);
+            animation: caretBlink 1.2s infinite step-end;
+            vertical-align: bottom;
+            flex-shrink: 0;
+        }
+
+        .error { color: var(--error-color); }
+        .success { color: var(--success-color); text-shadow: 0 0 5px var(--success-glow-color); }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; text-shadow: 0 0 8px var(--glow-color); }
+        .accent-color { color: var(--accent-color); text-shadow: 0 0 5px var(--glow-color); }
+        .secondary-accent-color { color: var(--secondary-accent-color); }
+        .type-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background: var(--accent-color);
+            vertical-align: bottom;
+            animation: caretBlink 1s infinite step-end;
+        }
+
         @media (max-width: 768px), (max-height: 500px) {
             body { font-size: 14px; }
             .welcome-block {
@@ -241,10 +314,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             const terminalContent = document.getElementById('terminal-content');
             const promptString = "guest@void:~# ";
-            let currentInputLine;
-            let currentInput;
+            let currentInputLine, currentInput;
             let terminalInCommandMode = false;
+            let dynamicInfoInterval;
             const startTime = Date.now();
+            
+            let commandHistory = [];
+            let historyIndex = -1;
 
             const newAsciiArt = `
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣫⣡⡿⡵⣫⣾⣿⡿⣋⣥⣶⣷⣾⣿⣿⣵⣦⣌⠻⣿⣿⣿⣿⣷⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢷⠝⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -253,10 +329,10 @@
 ⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⣿⡰⡞⣿⢳⣿⣷⣿⢟⣿⣿⢏⣬⣾⡇⢿⡏⢿⣿⣿⣿⣿⡏⣿⡌⣿⣿⣿⡟⣿⣿⣿⣿⣿⣿⣿⡇⢻⣿⣿⣿⡁⢷⢿⡌⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⢃⠀⢣⣽⣱⡿⣿⡏⣿⣏⣾⡟⣵⣿⣿⣿⣿⡜⣯⢊⢿⣿⣿⣿⣷⣿⡇⣮⢿⣿⣿⣹⣿⣿⣿⣿⣿⣿⣷⢸⣿⣿⣿⣧⣿⡘⣿⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⠼⢠⡽⣿⣿⠇⣿⢸⣟⣾⢯⣾⣿⣿⣿⣿⣿⣷⡜⣯⣎⢻⣿⣿⣿⣿⡇⣿⡎⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡎⣿⢻⣿⣿⣸⡇⢿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣧⢞⡻⣕⢸⢧⣿⣿⢸⣿⣿⣿⢄⢶⣯⣽⢿⣿⣿⣿⣿⣿⣌⢮⢒⠛⣛⡿⣿⢁⢿⣿⡼⣿⣿⣿⣷⣿⣿⣿⣿⣿⣧⢿⠘⣿⣿⣧⡇⠞⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣧⢞⡻⣕⢸⢧⣿⣿⢸⣿⣿⣿⢄⢶⣯⣽⢿⣿⣿⣿⣿⣿⣌⢮⢒⠛⣛⡿⣿⢁⢿⣿⡼⣿⣿⣷⣿⣿⣿⣿⣿⣿⣧⢿⠘⣿⣿⣧⡇⠞⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣾⣾⠆⣤⠘⣷⢹⣿⢹⡇⣏⣿⣷⣾⣯⣼⣿⣿⣿⣿⣟⣑⣓⡙⢣⡉⠆⡟⣼⣦⣻⣧⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠸⡆⣿⣿⣿⢗⡖⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⢧⢫⣰⣿⢋⡇⣮⠘⠻⢞⢿⣷⣾⣻⣿⣿⣿⣿⣿⣿⣿⡿⢆⣙⡼⢀⠻⣛⡷⣻⣽⢻⣿⣿⣿⣿⣿⣿⣿⡏⢸⣿⣿⣽⣿⡘⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⡟⣮⢿⡿⣿⣏⣧⠸⠀⢰⣀⢉⠒⠝⢣⣿⣿⣿⣿⣿⣿⣿⣡⣿⡑⠡⠤⠈⠊⠻⢷⠉⣾⡟⣽⣿⣿⣿⣿⢿⡇⡚⣩⣭⡭⠽⠷⠤⣭⡭⠭⣭⣭⡭⠭⢭⣝⢻
+⣿⣿⣿⣿⣿⣿⡟⣮⢿⡿⣿⣏⣧⠸⠀⢰⣀⢉⠒⠝⢣⣿⣿⣿⣿⣿⣿⣿⣿⣡⣿⡑⠡⠤⠈⠊⠻⢷⠉⣾⡟⣽⣿⣿⣿⣿⢿⡇⡚⣩⣭⡭⠽⠷⠤⣭⡭⠭⣭⣭⡭⠭⢭⣝⢻
 ⣿⣿⣿⣿⣿⣿⣿⡇⣿⡇⢣⡏⣿⣝⡀⡇⣷⡹⣌⠳⠤⠌⢻⣿⣿⣿⣿⣿⣿⠟⠁⣀⠉⣉⠉⠉⡤⢠⡤⡀⣐⣿⣿⣻⣿⡿⣼⠃⣻⣭⣿⣶⣶⢳⣗⣶⣿⣿⣶⡶⣖⡴⣫⣴⣿
 ⣿⣿⣿⣿⣿⣿⣿⣧⢻⡇⢦⢏⢘⡟⣆⢻⢸⣿⣮⣯⣭⣿⣿⣿⣿⣿⣿⠟⡡⣢⣾⡻⣷⣽⣛⣛⡤⣃⣼⣳⣿⡿⣳⡟⣸⣧⣇⢺⣿⣿⣿⡿⣫⣿⠾⡟⣻⣭⡵⣺⣵⣾⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣄⢷⢸⣣⣣⡻⡿⣆⠃⠛⢿⣿⣿⣟⣽⣛⣿⣯⣴⣿⣿⣿⣿⣿⣿⣶⣶⠞⢈⡿⢡⣿⢿⣿⣟⢰⣟⡌⠀⣺⣿⠛⢉⣪⣥⣶⠿⢛⣭⣾⣿⣿⣿⣿⣿⣿⣿
@@ -266,7 +342,7 @@
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡺⣽⡿⡇⠊⣿⢏⣷⡝⢽⢿⣿⣯⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⡰⣚⣵⠿⢋⣴⣏⣜⣎⠆⢯⢧⣿⢸⣷⠂⢻⣿⣿⠘⣿⣕⠻⢯⠻⣆⠙⢿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣫⡾⢷⣿⣾⣿⣿⢏⣾⣿⢳⣷⡜⢽⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢃⢉⣠⣾⣿⠏⢬⢮⠈⢶⡏⣸⣿⣼⣿⣜⡈⣿⣿⣧⢻⣿⣦⠮⡟⣗⡯⣎⠻⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣻⠷⢋⢴⣿⢿⣿⡿⢣⣾⣿⢧⣹⣟⣽⣷⣅⠙⢿⣿⡿⠿⠛⣛⣭⠴⣺⠵⢿⣻⣭⢄⡠⡳⡃⣬⡎⡇⣿⣿⢿⣿⣿⣻⡘⣿⣿⡌⣿⣿⣧⣓⡝⣿⠎⢳⡜⢿
-⣿⣿⡿⣿⢽⣾⢵⣰⣫⡿⣵⣿⠟⣡⣿⣿⣳⣷⢯⣾⡏⣸⣟⡖⡂⠠⣤⣤⣤⣤⣶⣶⡾⠿⣻⡻⠁⢈⢊⣜⣼⡟⡄⣧⢿⣿⢸⡞⣿⣷⢷⣜⣿⣿⡘⣿⣿⣧⡈⠺⣧⡈⢿⣾⡜
+⣿⡿⣿⢽⣾⢵⣰⣫⡿⣵⣿⠟⣡⣿⣿⣳⣷⢯⣾⡏⣸⣟⡖⡂⠠⣤⣤⣤⣤⣶⣶⡾⠿⣻⡻⠁⢈⢊⣜⣼⡟⡄⣧⢿⣿⢸⡞⣿⣷⢷⣜⣿⣿⡘⣿⣿⣧⡈⠺⣧⡈⢿⣾⡜⢿
 ⣿⢟⠙⣈⣵⢟⣽⣿⣽⣫⣾⡿⡹⣵⣷⡿⣵⡟⣴⣿⠯⢖⣻⣼⡇⠙⣶⠶⠶⠶⡶⠶⣶⣿⡟⣫⢀⣴⣢⡟⣼⣿⣷⡇⢸⡾⣿⡇⡱⠘⣿⣎⣿⣮⢿⣷⡨⡿⣿⣷⣶⡔⢕⠸⣿
 ⣾⢦⣾⣿⣷⣽⢟⢞⣷⡿⡫⢔⣾⣿⢋⣞⣿⣿⠋⡅⠤⠾⠿⠶⠒⡇⣿⣿⣿⣿⣿⣿⡿⣫⢞⣵⡿⣷⠟⢴⣿⣿⣰⡾⢺⣇⠹⣇⠘⣅⢮⢿⡘⣿⣷⡻⣷⠑⣝⢿⣿⣿⡧⣳⣟
 ⣷⢿⡿⣻⡿⣫⣾⡿⣏⣺⣪⣿⠟⣡⣿⢏⣶⢿⣴⣾⢍⡩⢟⣟⣳⣀⠿⣿⣿⣿⡿⡯⡟⡵⢟⢛⣾⡯⣼⠊⢹⣿⠔⣰⡄⢿⡴⡽⡔⣤⠪⣓⠓⢝⣿⣿⣾⢷⣈⣷⡟⢿⣿⣿⣾
@@ -281,6 +357,7 @@
   <span class="accent-color">skills</span>       - list technical proficiencies.
   <span class="accent-color">contact</span>      - view contact information.
   <span class="accent-color">clear</span>        - return to boot sequence.
+  <span class="accent-color">reboot</span>       - re-initialize void_os.
                 `,
                 aboutme: () => `
 <span class="secondary-accent-color">[user_profile]</span>
@@ -324,15 +401,57 @@
   <span class="label">twt:</span><span class="value">  <a href="https://www.x.com/0xFar3000" target="_blank">0xfar3000</a></span>
                 `,
                 clear: () => {
-                    displayWelcomeInTerminal();
+                    displayWelcomeInTerminal(true);
+                    return "";
+                },
+                reboot: () => {
+                    runBootSequence();
                     return "";
                 }
             };
 
-            function displayWelcomeInTerminal() {
+            function runBootSequence() {
                 terminalInCommandMode = false;
                 terminalContent.innerHTML = '';
+                if (dynamicInfoInterval) clearInterval(dynamicInfoInterval);
+                window.removeEventListener('resize', asciiArtResizeHandler);
+                document.removeEventListener('keydown', handleInitialKeyPress);
+                document.removeEventListener('touchstart', handleInitialKeyPress);
 
+                const bootLines = [
+                    { text: 'VOID_OS v3.1 Bootloader initializing...', delay: 100 },
+                    { text: 'nexus_bios v1.13.37 loaded.', delay: 150 },
+                    { text: 'checking system integrity... <span class="success">[ok]</span>', delay: 200 },
+                    { text: 'loading kernel 9.f.k-far3k-void...', delay: 100 },
+                    { text: 'mounting root_fs on /dev/memfs (ephemeral)...', delay: 150 },
+                    { text: 'initializing quantum entanglement processor...', delay: 200 },
+                    { text: 'calibrating cryo-cooled memory banks...', delay: 150 },
+                    { text: 'establishing quantumlink on q_eth0... <span class="success">link up (1 tbps)</span>', delay: 300 },
+                    { text: 'starting fluent_stream daemon...', delay: 100 },
+                    { text: 'boot sequence complete. launching shell.', delay: 400 },
+                ];
+
+                let delay = 0;
+                bootLines.forEach(line => {
+                    setTimeout(() => {
+                        const lineDiv = document.createElement('div');
+                        lineDiv.classList.add('line', 'boot-line');
+                        lineDiv.innerHTML = line.text;
+                        terminalContent.appendChild(lineDiv);
+                        terminalContent.scrollTop = terminalContent.scrollHeight;
+                    }, delay);
+                    delay += line.delay;
+                });
+
+                setTimeout(() => {
+                    displayWelcomeInTerminal(false);
+                }, delay + 200);
+            }
+
+            function displayWelcomeInTerminal(isClearCommand) {
+                terminalInCommandMode = false;
+                terminalContent.innerHTML = '';
+                
                 const welcomeBlock = document.createElement('div');
                 welcomeBlock.classList.add('welcome-block');
 
@@ -366,19 +485,38 @@
 
                 const promptToEnter = document.createElement('p');
                 promptToEnter.classList.add('prompt-to-enter');
-                promptToEnter.innerHTML = `Press any key or tap screen to interface with VOID_OS...`;
                 terminalContent.appendChild(promptToEnter);
                 
-                requestAnimationFrame(() => {
-                    adjustAsciiArtSize();
-                });
-                
+                requestAnimationFrame(adjustAsciiArtSize);
                 window.addEventListener('resize', asciiArtResizeHandler);
-
                 updateDynamicWelcomeInfo();
-                document.addEventListener('keydown', handleInitialKeyPress, { once: true });
-                document.addEventListener('touchstart', handleInitialKeyPress, { once: true });
+                dynamicInfoInterval = setInterval(updateDynamicWelcomeInfo, 1000);
+
+                if (isClearCommand) {
+                    switchToCommandMode();
+                } else {
+                    typewriter(promptToEnter, `Press any key or tap screen to interface with VOID_OS...`, () => {
+                        document.addEventListener('keydown', handleInitialKeyPress, { once: true });
+                        document.addEventListener('touchstart', handleInitialKeyPress, { once: true });
+                    });
+                }
                 terminalContent.scrollTop = 0;
+            }
+
+            function typewriter(element, text, callback) {
+                let i = 0;
+                element.innerHTML = "";
+                const cursorSpan = '<span class="type-cursor"></span>';
+                const typingInterval = setInterval(() => {
+                    if (i < text.length) {
+                        element.innerHTML = text.substring(0, i + 1) + cursorSpan;
+                        i++;
+                    } else {
+                        clearInterval(typingInterval);
+                        element.innerHTML = text;
+                        if (callback) callback();
+                    }
+                }, 50);
             }
             
             function asciiArtResizeHandler() {
@@ -386,14 +524,9 @@
                     requestAnimationFrame(adjustAsciiArtSize);
                 }
             }
-
-            function handleInitialKeyPress(event) {
-                if (event.key === " ") event.preventDefault();
-                
-                // Clean up both listeners
-                document.removeEventListener('keydown', handleInitialKeyPress);
-                document.removeEventListener('touchstart', handleInitialKeyPress);
-
+            
+            function switchToCommandMode() {
+                if (dynamicInfoInterval) clearInterval(dynamicInfoInterval);
                 window.removeEventListener('resize', asciiArtResizeHandler);
                 
                 terminalContent.innerHTML = '';
@@ -405,30 +538,28 @@
                 newPrompt();
             }
 
+            function handleInitialKeyPress(event) {
+                if (event.key === " ") event.preventDefault();
+                switchToCommandMode();
+            }
+
             function updateDynamicWelcomeInfo() {
                 const uptimeElem = document.getElementById('uptime-value');
                 if (uptimeElem) {
-                    const now = Date.now();
-                    const diffSeconds = Math.floor((now - startTime) / 1000);
+                    const diffSeconds = Math.floor((Date.now() - startTime) / 1000);
                     const d = Math.floor(diffSeconds / (3600*24));
                     const h = Math.floor((diffSeconds % (3600*24)) / 3600);
                     const m = Math.floor((diffSeconds % 3600) / 60);
-                    const s = Math.floor(diffSeconds % 60);
+                    const s = diffSeconds % 60;
                     uptimeElem.textContent = `${d}d ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
                 }
 
                 const resolutionElem = document.getElementById('resolution-value');
                 if (resolutionElem) resolutionElem.textContent = `${window.innerWidth}x${window.innerHeight} @ ${screen.colorDepth}bpp`;
                 
-                const ramTotalElem = document.getElementById('ram-total-value');
-                if (ramTotalElem) ramTotalElem.textContent = "1ZB";
-
                 const storageUsageElem = document.getElementById('storage-usage-value');
                 if (storageUsageElem) storageUsageElem.textContent = (Math.random() * 5 + 2).toFixed(2);
                 
-                const networkStatusElem = document.getElementById('network-status-value');
-                if (networkStatusElem) networkStatusElem.textContent = "connected";
-
                 const cpuLoadElem = document.getElementById('cpu-load-value');
                 if (cpuLoadElem) cpuLoadElem.textContent = (Math.random() * 15 + 5).toFixed(1);
 
@@ -438,10 +569,6 @@
                     const now = new Date();
                     dateElem.textContent = now.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
                     timeElem.textContent = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-                }
-
-                if (!terminalInCommandMode) {
-                    requestAnimationFrame(updateDynamicWelcomeInfo);
                 }
             }
 
@@ -458,11 +585,20 @@
                 if (!terminalInCommandMode) return;
                 currentInputLine = document.createElement('div');
                 currentInputLine.classList.add('line', 'input-line');
-                
+                currentInputLine.onclick = () => focusInput();
+
                 const promptSpan = document.createElement('span');
                 promptSpan.classList.add('prompt');
                 promptSpan.textContent = promptString;
                 currentInputLine.appendChild(promptSpan);
+                
+                const commandOutput = document.createElement('span');
+                commandOutput.classList.add('command-output');
+                currentInputLine.appendChild(commandOutput);
+
+                const caret = document.createElement('span');
+                caret.classList.add('caret');
+                currentInputLine.appendChild(caret);
                 
                 currentInput = document.createElement('input');
                 currentInput.type = 'text';
@@ -471,8 +607,12 @@
                 currentInput.setAttribute('autocapitalize', 'off');
                 currentInput.setAttribute('spellcheck', 'false');
                 currentInput.addEventListener('keydown', handleTerminalInput);
-                currentInputLine.appendChild(currentInput);
+
+                currentInput.addEventListener('input', () => {
+                    commandOutput.textContent = currentInput.value;
+                });
                 
+                document.body.appendChild(currentInput);
                 terminalContent.appendChild(currentInputLine);
                 focusInput();
                 terminalContent.scrollTop = terminalContent.scrollHeight;
@@ -480,26 +620,50 @@
 
             function handleTerminalInput(e) {
                 if (!terminalInCommandMode || !currentInput) return;
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const commandStr = currentInput.value.trim();
-                    const enteredCommandText = currentInput.value;
-                    
-                    currentInput.readOnly = true;
-                    currentInput.classList.remove('command-input');
 
-                    const oldInputLine = currentInputLine;
-                    oldInputLine.removeChild(currentInput); 
-                    const commandTextNode = document.createTextNode(enteredCommandText);
-                    oldInputLine.appendChild(commandTextNode);
+                    if (currentInputLine) {
+                        currentInputLine.classList.remove('input-line');
+                        currentInputLine.onclick = null;
+                        const caret = currentInputLine.querySelector('.caret');
+                        if (caret) caret.remove();
+                    }
+
+                    currentInput.remove();
                     currentInput = null;
 
                     if (commandStr) {
+                        commandHistory.unshift(commandStr);
+                        historyIndex = -1;
                         processCommand(commandStr);
                     }
                     
-                    if (terminalInCommandMode) {
+                    const commandName = commandStr.toLowerCase().split(' ')[0];
+                    if (terminalInCommandMode && commandName !== 'clear' && commandName !== 'reboot') {
                         newPrompt();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (historyIndex < commandHistory.length - 1) {
+                        historyIndex++;
+                        currentInput.value = commandHistory[historyIndex];
+                        currentInput.dispatchEvent(new Event('input'));
+                        currentInput.setSelectionRange(currentInput.value.length, currentInput.value.length);
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (historyIndex > 0) {
+                        historyIndex--;
+                        currentInput.value = commandHistory[historyIndex];
+                        currentInput.dispatchEvent(new Event('input'));
+                        currentInput.setSelectionRange(currentInput.value.length, currentInput.value.length);
+                    } else {
+                        historyIndex = -1;
+                        currentInput.value = "";
+                        currentInput.dispatchEvent(new Event('input'));
                     }
                 }
             }
@@ -522,7 +686,7 @@
                 }
             };
             
-            displayWelcomeInTerminal();
+            runBootSequence();
         });
     </script>
 </body>
