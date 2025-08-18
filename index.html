@@ -254,7 +254,7 @@
             body { font-size: 14px; }
             .welcome-block {
                 flex-direction: column;
-                height: 100%;
+                height: calc(100% - 60px); 
                 gap: 0;
             }
             #welcome-ascii-art-container {
@@ -269,7 +269,15 @@
                 justify-content: flex-start;
                 padding-top: 10px;
             }
-            .prompt-to-enter { font-size: 0.9em; }
+            .prompt-to-enter {
+                font-size: 0.9em;
+                position: relative;
+                bottom: auto;
+                left: auto;
+                width: 100%;
+                text-align: center;
+                padding-top: 15px;
+            }
         }
     </style>
 </head>
@@ -620,6 +628,7 @@
 
                 currentInput.addEventListener('input', () => {
                     commandOutput.textContent = currentInput.value;
+                    terminalContent.scrollTop = terminalContent.scrollHeight;
                 });
                 
                 document.body.appendChild(currentInput);
